@@ -31,7 +31,7 @@ public class DbListener {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    @Scheduled(cron = "0 * * ? * *")
+    @Scheduled(cron = "*/30 * * * * *")
     public void resubmitTask (){
         List<RetryMessage> messages = processedMessageService.getAllByStatus(RetryStatus.RETRY_IN_PROGRESS);
         log.info("Resubmit job started. Found {} messages to retry", messages.size());

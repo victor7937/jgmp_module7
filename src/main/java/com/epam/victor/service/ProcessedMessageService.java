@@ -81,33 +81,11 @@ public class ProcessedMessageService {
         }
         if (retryCount > maxRetryCount) {
             log.info("Message {} was discarded", uuid);
-            FailedMessage failedMessage = new FailedMessage(
-                    "retry count exceeded with " + (retryCount - 1) + " times",
-                    Instant.now(),
-                    findOriginalByUuid(uuid));
-            failedMessageRepository.save(failedMessage);
-            if (maxRetryCount != 0){
-                RetryMessage retryMessage = findRetryByUuid(uuid);
-                retryMessage.setRetryStatus(RetryStatus.RETRY_FAILED);
-                retryMessageRepository.save(retryMessage);
-            }
+            saveAsDiscarded(uuid, retryCount);
             return;
         }
         log.info("Retrying message {} for the {} time", uuid, retryCount);
-        RetryMessage retryMessage;
-        if (retryCount == 1){
-            retryMessage = new RetryMessage(
-                    Instant.now(),
-                    RetryStatus.RETRY_IN_PROGRESS,
-                    message.getFailRate(),
-                    retryCount,
-                    findOriginalByUuid(uuid));
-        } else {
-            retryMessage = findRetryByUuid(uuid);
-            retryMessage.setRetryCount(retryCount);
-            retryMessage.setLastRetryTime(Instant.now());
-        }
-        retryMessageRepository.save(retryMessage);
+        saveAsNextRetry(uuid, retryCount, message.getFailRate());
     }
 
 
@@ -123,6 +101,36 @@ public class ProcessedMessageService {
     public RetryMessage findRetryByUuid (String uuid){
         return retryMessageRepository.findByMessage_Uuid(uuid).orElseThrow(
                 () -> new IdNotFoundException("Id " + uuid + " was not found"));
+    }
+
+    private void saveAsDiscarded(String uuid, int retryCount){
+        FailedMessage failedMessage = new FailedMessage(
+                "retry count exceeded with " + (retryCount - 1) + " times",
+                Instant.now(),
+                findOriginalByUuid(uuid));
+        failedMessageRepository.save(failedMessage);
+        if (maxRetryCount != 0){
+            RetryMessage retryMessage = findRetryByUuid(uuid);
+            retryMessage.setRetryStatus(RetryStatus.RETRY_FAILED);
+            retryMessageRepository.save(retryMessage);
+        }
+    }
+
+    private void saveAsNextRetry(String uuid, int retryCount, float failRate){
+        RetryMessage retryMessage;
+        if (retryCount == 1){
+            retryMessage = new RetryMessage(
+                    Instant.now(),
+                    RetryStatus.RETRY_IN_PROGRESS,
+                    failRate,
+                    retryCount,
+                    findOriginalByUuid(uuid));
+        } else {
+            retryMessage = findRetryByUuid(uuid);
+            retryMessage.setRetryCount(retryCount);
+            retryMessage.setLastRetryTime(Instant.now());
+        }
+        retryMessageRepository.save(retryMessage);
     }
 
     private boolean isFail(float failRate){
